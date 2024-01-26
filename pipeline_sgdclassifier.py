@@ -28,7 +28,7 @@ def read_bigquery_table(
     client = bigquery.Client(project=project_id)
 
     # Define la consulta para seleccionar todos los datos de la tabla.
-    query = f"SELECT * FROM `{project_id}.{dataset_id}.{table_id}` LIMIT 10"
+    query = f"SELECT * FROM `{project_id}.{dataset_id}.{table_id}` "
     
     # Ejecuta la consulta.
     query_job = client.query(query)
