@@ -1,20 +1,30 @@
+import time
+from datetime import datetime
+from typing import NamedTuple
+
 import kfp
 from kfp import dsl
 from kfp.v2 import compiler
 from kfp.v2.dsl import (Artifact, Dataset, Input, InputPath, Model, Output,
                         OutputPath, ClassificationMetrics, Metrics, component, pipeline)
+from kfp.v2.google.client import AIPlatformClient
+
+from google.cloud import aiplatform
+from google_cloud_pipeline_components import aiplatform as gcc_aip
 
 PROJECT_ID = 'mlops-final-project-412223'
 DATASET_ID = "data_mlops_fp"  
 TABLE_ID = "tb_mlops_fp"  
 
 @component(
-            packages_to_install=["google-cloud-bigquery==3.17.1"],
+            packages_to_install=["google-cloud-bigquery==3.10.0"],
 )
 def read_bigquery_table(
     project_id: str, 
     dataset_id: str, 
-    table_id: str) -> str:
+    table_id: str,
+    dataset: Output[Dataset],
+):
     """
     Lee datos de una tabla de BigQuery y devuelve algún resultado como ejemplo.
     
@@ -34,11 +44,14 @@ def read_bigquery_table(
     # Define la consulta para seleccionar todos los datos de la tabla.
     query = f"SELECT * FROM `{project_id}.{dataset_id}.{table_id}` "
     
-    # Ejecuta la consulta.
-    query_job = client.query(query)
+    # configuramos la consulta
+    job_config = bigquery.QueryJobConfig()
+    query_job = client.query(query=query, job_config=job_config)
 
-    # Convierte los resultados en un dataframe de pandas y devuelve una representación en cadena.
-    df = query_job.to_dataframe()
+    # Convierte los resultados en un dataframe de pandas y
+    # escribe los resultados en un archivo CSV.
+    df = query_job.result().to_dataframe()
+    df.to_csv(dataset.path, index=False)
 
 
 @dsl.pipeline(

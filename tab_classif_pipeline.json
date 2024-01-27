@@ -1,93 +1,104 @@
 {
-  "components": {
-    "comp-read-bigquery-table": {
-      "executorLabel": "exec-read-bigquery-table",
-      "inputDefinitions": {
-        "parameters": {
-          "dataset_id": {
-            "parameterType": "STRING"
-          },
-          "project_id": {
-            "parameterType": "STRING"
-          },
-          "table_id": {
-            "parameterType": "STRING"
+  "pipelineSpec": {
+    "components": {
+      "comp-read-bigquery-table": {
+        "executorLabel": "exec-read-bigquery-table",
+        "inputDefinitions": {
+          "parameters": {
+            "dataset_id": {
+              "type": "STRING"
+            },
+            "project_id": {
+              "type": "STRING"
+            },
+            "table_id": {
+              "type": "STRING"
+            }
           }
-        }
-      },
-      "outputDefinitions": {
-        "parameters": {
-          "Output": {
-            "parameterType": "STRING"
-          }
-        }
-      }
-    }
-  },
-  "deploymentSpec": {
-    "executors": {
-      "exec-read-bigquery-table": {
-        "container": {
-          "args": [
-            "--executor_input",
-            "{{$}}",
-            "--function_to_execute",
-            "read_bigquery_table"
-          ],
-          "command": [
-            "sh",
-            "-c",
-            "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet --no-warn-script-location 'kfp==2.6.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&  python3 -m pip install --quiet --no-warn-script-location 'google-cloud-bigquery==3.17.1' && \"$0\" \"$@\"\n",
-            "sh",
-            "-ec",
-            "program_path=$(mktemp -d)\n\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\n_KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
-            "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import *\n\ndef read_bigquery_table(\n    project_id: str, \n    dataset_id: str, \n    table_id: str) -> str:\n    \"\"\"\n    Lee datos de una tabla de BigQuery y devuelve alg\u00fan resultado como ejemplo.\n\n    Args:\n    project_id: ID del proyecto en GCP.\n    dataset_id: ID del conjunto de datos en BigQuery.\n    table_id: ID de la tabla en el conjunto de datos.\n\n    Returns:\n    Una cadena que representa una parte de los datos le\u00eddos, por ejemplo.\n    \"\"\"\n    from google.cloud import bigquery\n\n    # Crea un cliente de BigQuery.\n    client = bigquery.Client(project=project_id)\n\n    # Define la consulta para seleccionar todos los datos de la tabla.\n    query = f\"SELECT * FROM `{project_id}.{dataset_id}.{table_id}` \"\n\n    # Ejecuta la consulta.\n    query_job = client.query(query)\n\n    # Convierte los resultados en un dataframe de pandas y devuelve una representaci\u00f3n en cadena.\n    df = query_job.to_dataframe()\n\n"
-          ],
-          "image": "python:3.7"
-        }
-      }
-    }
-  },
-  "pipelineInfo": {
-    "description": "A demo pipeline.",
-    "name": "mlops-fp-pipeline"
-  },
-  "root": {
-    "dag": {
-      "tasks": {
-        "read-bigquery-table": {
-          "cachingOptions": {
-            "enableCache": true
-          },
-          "componentRef": {
-            "name": "comp-read-bigquery-table"
-          },
-          "inputs": {
-            "parameters": {
-              "dataset_id": {
-                "runtimeValue": {
-                  "constant": "data_mlops_fp"
-                }
-              },
-              "project_id": {
-                "runtimeValue": {
-                  "constant": "mlops-final-project-412223"
-                }
-              },
-              "table_id": {
-                "runtimeValue": {
-                  "constant": "tb_mlops_fp"
-                }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "dataset": {
+              "artifactType": {
+                "schemaTitle": "system.Dataset",
+                "schemaVersion": "0.0.1"
               }
             }
-          },
-          "taskInfo": {
-            "name": "read-bigquery-table"
           }
         }
       }
-    }
+    },
+    "deploymentSpec": {
+      "executors": {
+        "exec-read-bigquery-table": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "read_bigquery_table"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'google-cloud-bigquery==3.10.0' 'kfp==1.8.22' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef read_bigquery_table(\n    project_id: str, \n    dataset_id: str, \n    table_id: str,\n    dataset: Output[Dataset],\n):\n    \"\"\"\n    Lee datos de una tabla de BigQuery y devuelve alg\u00fan resultado como ejemplo.\n\n    Args:\n    project_id: ID del proyecto en GCP.\n    dataset_id: ID del conjunto de datos en BigQuery.\n    table_id: ID de la tabla en el conjunto de datos.\n\n    Returns:\n    Una cadena que representa una parte de los datos le\u00eddos, por ejemplo.\n    \"\"\"\n    from google.cloud import bigquery\n\n    # Crea un cliente de BigQuery.\n    client = bigquery.Client(project=project_id)\n\n    # Define la consulta para seleccionar todos los datos de la tabla.\n    query = f\"SELECT * FROM `{project_id}.{dataset_id}.{table_id}` \"\n\n    # configuramos la consulta\n    job_config = bigquery.QueryJobConfig()\n    query_job = client.query(query=query, job_config=job_config)\n\n    # Convierte los resultados en un dataframe de pandas y\n    # escribe los resultados en un archivo CSV.\n    df = query_job.result().to_dataframe()\n    df.to_csv(dataset.path, index=False)\n\n"
+            ],
+            "image": "python:3.7"
+          }
+        }
+      }
+    },
+    "pipelineInfo": {
+      "name": "mlops-fp-pipeline"
+    },
+    "root": {
+      "dag": {
+        "tasks": {
+          "read-bigquery-table": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-read-bigquery-table"
+            },
+            "inputs": {
+              "parameters": {
+                "dataset_id": {
+                  "runtimeValue": {
+                    "constantValue": {
+                      "stringValue": "data_mlops_fp"
+                    }
+                  }
+                },
+                "project_id": {
+                  "runtimeValue": {
+                    "constantValue": {
+                      "stringValue": "mlops-final-project-412223"
+                    }
+                  }
+                },
+                "table_id": {
+                  "runtimeValue": {
+                    "constantValue": {
+                      "stringValue": "tb_mlops_fp"
+                    }
+                  }
+                }
+              }
+            },
+            "taskInfo": {
+              "name": "read-bigquery-table"
+            }
+          }
+        }
+      }
+    },
+    "schemaVersion": "2.0.0",
+    "sdkVersion": "kfp-1.8.22"
   },
-  "schemaVersion": "2.1.0",
-  "sdkVersion": "kfp-2.6.0"
+  "runtimeConfig": {}
 }
