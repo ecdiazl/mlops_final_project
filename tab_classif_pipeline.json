@@ -1,6 +1,35 @@
 {
   "pipelineSpec": {
     "components": {
+      "comp-data-preprocessing": {
+        "executorLabel": "exec-data-preprocessing",
+        "inputDefinitions": {
+          "artifacts": {
+            "dataset": {
+              "artifactType": {
+                "schemaTitle": "system.Dataset",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "test_dataset": {
+              "artifactType": {
+                "schemaTitle": "system.Dataset",
+                "schemaVersion": "0.0.1"
+              }
+            },
+            "train_dataset": {
+              "artifactType": {
+                "schemaTitle": "system.Dataset",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          }
+        }
+      },
       "comp-read-bigquery-table": {
         "executorLabel": "exec-read-bigquery-table",
         "inputDefinitions": {
@@ -30,6 +59,26 @@
     },
     "deploymentSpec": {
       "executors": {
+        "exec-data-preprocessing": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "data_preprocessing"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'pandas==1.3.5' 'scikit-learn==1.0.2' 'kfp==1.8.22' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef data_preprocessing(\n    dataset: Input[Dataset],\n    train_dataset: Output[Dataset],\n    test_dataset: Output[Dataset],\n):\n    \"\"\"Preprocesses tabular data for training.\"\"\"\n    import pandas as pd\n    from sklearn.model_selection import train_test_split\n    from sklearn.preprocessing import LabelEncoder, StandardScaler\n\n    # lee los datos de entrada\n    df = pd.read_csv(dataset.path)\n\n    # separamos el target del resto de las variables\n    X, y = df.iloc[:,1:-1], df[['target']]\n    columns_x = X.columns\n\n    # escalamos las variables\n    scaler = StandardScaler()\n    X = scaler.fit_transform(X)\n    X = pd.DataFrame(X, columns=columns_x)\n\n    # concatenamos las variables escaladas con el target\n    df_scaled = pd.concat([X, y], axis=1)\n\n    # Split the data into train and test sets.\n    train_df, test_df = train_test_split(df_scaled, test_size=0.2, random_state=42)\n\n    train_df.to_csv(train_dataset.path, index=False)\n    test_df.to_csv(test_dataset.path, index=False)\n\n"
+            ],
+            "image": "python:3.7"
+          }
+        },
         "exec-read-bigquery-table": {
           "container": {
             "args": [
@@ -41,7 +90,7 @@
             "command": [
               "sh",
               "-c",
-              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'google-cloud-bigquery==3.10.0' 'kfp==1.8.22' && \"$0\" \"$@\"\n",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'google-cloud-bigquery[pandas]==3.10.0' 'kfp==1.8.22' && \"$0\" \"$@\"\n",
               "sh",
               "-ec",
               "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
@@ -58,6 +107,28 @@
     "root": {
       "dag": {
         "tasks": {
+          "data-preprocessing": {
+            "cachingOptions": {},
+            "componentRef": {
+              "name": "comp-data-preprocessing"
+            },
+            "dependentTasks": [
+              "read-bigquery-table"
+            ],
+            "inputs": {
+              "artifacts": {
+                "dataset": {
+                  "taskOutputArtifact": {
+                    "outputArtifactKey": "dataset",
+                    "producerTask": "read-bigquery-table"
+                  }
+                }
+              }
+            },
+            "taskInfo": {
+              "name": "data-preprocessing"
+            }
+          },
           "read-bigquery-table": {
             "cachingOptions": {
               "enableCache": true
