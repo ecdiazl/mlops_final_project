@@ -61,8 +61,7 @@ def read_bigquery_table(
 )
 def data_preprocessing(
     dataset: Input[Dataset],
-    train_dataset: Output[Dataset],
-    test_dataset: Output[Dataset],
+    scaled_dataset: Output[Dataset],
 ):
     """Preprocesses tabular data for training."""
     import pandas as pd
@@ -84,11 +83,82 @@ def data_preprocessing(
     # concatenamos las variables escaladas con el target
     df_scaled = pd.concat([X, y], axis=1)
 
-    # Split the data into train and test sets.
-    train_df, test_df = train_test_split(df_scaled, test_size=0.2, random_state=42)
+    # guardamos el archivo como CSV
+    df_scaled.to_csv(scaled_dataset.path, index=False)
 
-    train_df.to_csv(train_dataset.path, index=False)
-    test_df.to_csv(test_dataset.path, index=False)
+
+@component(
+    packages_to_install=[
+        "pandas==1.3.5",
+        "scikit-learn==1.0.2",
+        "joblib==1.1.0",
+    ],
+)
+def model_training(
+    scaled_dataset: Input[Dataset],
+    model: Output[Model],
+    metrics: Output[Metrics],
+):
+    """Trains a model on tabular data."""
+    import pandas as pd
+    import joblib
+    import os
+    from sklearn.linear_model import SGDClassifier
+    from sklearn.metrics import (accuracy_score, precision_recall_curve,
+                                 roc_auc_score)
+    from sklearn.model_selection import (RandomizedSearchCV, StratifiedKFold,
+                                         train_test_split)
+    from sklearn.preprocessing import LabelEncoder
+
+    # read the data
+    df = pd.read_csv(scaled_dataset.path)
+
+    # split the data into X and y
+    X, y = df.iloc[:, :-1], df[['target']]
+
+    # Assuming X and y are predefined
+    X_train, X_test, y_train, y_test = train_test_split(X, y)
+
+    params = {
+        "alpha": [0.0001, 0.001, 0.01, 0.1],
+        "penalty": ["l2", "l1", "elasticnet"],
+        "loss": ["hinge", "log", "modified_huber"],
+        "max_iter": [1000, 2000, 3000]
+    }
+
+    sgd_model = SGDClassifier(random_state=42)
+
+    folds = 3
+    param_comb = 10
+
+    skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
+
+    random_search = RandomizedSearchCV(
+        sgd_model,
+        param_distributions=params,
+        n_iter=param_comb,
+        scoring="precision",
+        n_jobs=4,
+        cv=skf.split(X_train, y_train),
+        verbose=4,
+        random_state=42,
+    )
+
+    random_search.fit(X_train, y_train)
+    sgd_model_best = random_search.best_estimator_
+    predictions = sgd_model_best.predict(X_test)
+    score = accuracy_score(y_test, predictions)
+    auc = roc_auc_score(y_test, predictions)
+    _ = precision_recall_curve(y_test, predictions)
+
+    metrics.log_metric("accuracy", (score * 100.0))
+    #metrics.log_metric("framework", "xgboost")
+    metrics.log_metric("dataset_size", len(df))
+    metrics.log_metric("AUC", auc)
+
+    # Export the model to a file
+    os.makedirs(model.path, exist_ok=True)
+    joblib.dump(sgd_model_best, os.path.join(model.path, "model.joblib"))
 
 
 @dsl.pipeline(
@@ -110,7 +180,16 @@ def pipeline():
         .after(read_bigquery_table_task)
         .set_caching_options(False)
     )
-    
+
+    model_training_task = (
+        model_training(
+            scaled_dataset=data_preprocessing_task.outputs["scaled_dataset"],
+        )
+        .after(data_preprocessing_task)
+        .set_caching_options(False)
+    )
+
+# Deploy the model to Vertex AI
 if __name__ == '__main__':
     
     compiler.Compiler().compile(
