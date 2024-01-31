@@ -160,6 +160,38 @@ def model_training(
     os.makedirs(model.path, exist_ok=True)
     joblib.dump(sgd_model_best, os.path.join(model.path, "model.joblib"))
 
+@component(
+    packages_to_install=["google-cloud-aiplatform==1.25.0"],
+)
+def deploy_sgd_model(
+    model: Input[Model],
+    project_id: str,
+    vertex_endpoint: Output[Artifact],
+    vertex_model: Output[Model],
+):
+    """Deploys an SGDClassifier model to Vertex AI Endpoint.
+
+    Args:
+        model: The model to deploy.
+        project_id: The project ID of the Vertex AI Endpoint.
+
+    Returns:
+        vertex_endpoint: The deployed Vertex AI Endpoint.
+        vertex_model: The deployed Vertex AI Model.
+    """
+    from google.cloud import aiplatform
+
+    aiplatform.init(project=project_id)
+
+    deployed_model = aiplatform.Model.upload(
+        display_name="cardiovascular-disease-model",
+        artifact_uri=model.uri,
+        serving_container_image_uri="us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.1-6:latest",
+    )
+    endpoint = deployed_model.deploy(machine_type="n1-standard-4")
+
+    vertex_endpoint.uri = endpoint.resource_name
+    vertex_model.uri = deployed_model.resource_name
 
 @dsl.pipeline(
     name="mlops-fp-pipeline",
@@ -187,6 +219,11 @@ def pipeline():
         )
         .after(data_preprocessing_task)
         .set_caching_options(False)
+    )
+
+    _ = deploy_sgd_model(
+        project_id=PROJECT_ID,
+        model=model_training_task.outputs["model"],
     )
 
 # Deploy the model to Vertex AI

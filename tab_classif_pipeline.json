@@ -24,6 +24,40 @@
           }
         }
       },
+      "comp-deploy-sgd-model": {
+        "executorLabel": "exec-deploy-sgd-model",
+        "inputDefinitions": {
+          "artifacts": {
+            "model": {
+              "artifactType": {
+                "schemaTitle": "system.Model",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          },
+          "parameters": {
+            "project_id": {
+              "type": "STRING"
+            }
+          }
+        },
+        "outputDefinitions": {
+          "artifacts": {
+            "vertex_endpoint": {
+              "artifactType": {
+                "schemaTitle": "system.Artifact",
+                "schemaVersion": "0.0.1"
+              }
+            },
+            "vertex_model": {
+              "artifactType": {
+                "schemaTitle": "system.Model",
+                "schemaVersion": "0.0.1"
+              }
+            }
+          }
+        }
+      },
       "comp-model-training": {
         "executorLabel": "exec-model-training",
         "inputDefinitions": {
@@ -98,6 +132,26 @@
               "-ec",
               "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
               "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef data_preprocessing(\n    dataset: Input[Dataset],\n    scaled_dataset: Output[Dataset],\n):\n    \"\"\"Preprocesses tabular data for training.\"\"\"\n    import pandas as pd\n    from sklearn.model_selection import train_test_split\n    from sklearn.preprocessing import LabelEncoder, StandardScaler\n\n    # lee los datos de entrada\n    df = pd.read_csv(dataset.path)\n\n    # separamos el target del resto de las variables\n    X, y = df.iloc[:,1:-1], df[['target']]\n    columns_x = X.columns\n\n    # escalamos las variables\n    scaler = StandardScaler()\n    X = scaler.fit_transform(X)\n    X = pd.DataFrame(X, columns=columns_x)\n\n    # concatenamos las variables escaladas con el target\n    df_scaled = pd.concat([X, y], axis=1)\n\n    # guardamos el archivo como CSV\n    df_scaled.to_csv(scaled_dataset.path, index=False)\n\n"
+            ],
+            "image": "python:3.7"
+          }
+        },
+        "exec-deploy-sgd-model": {
+          "container": {
+            "args": [
+              "--executor_input",
+              "{{$}}",
+              "--function_to_execute",
+              "deploy_sgd_model"
+            ],
+            "command": [
+              "sh",
+              "-c",
+              "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip || python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1 python3 -m pip install --quiet     --no-warn-script-location 'google-cloud-aiplatform==1.25.0' 'kfp==1.8.22' && \"$0\" \"$@\"\n",
+              "sh",
+              "-ec",
+              "program_path=$(mktemp -d)\nprintf \"%s\" \"$0\" > \"$program_path/ephemeral_component.py\"\npython3 -m kfp.v2.components.executor_main                         --component_module_path                         \"$program_path/ephemeral_component.py\"                         \"$@\"\n",
+              "\nimport kfp\nfrom kfp.v2 import dsl\nfrom kfp.v2.dsl import *\nfrom typing import *\n\ndef deploy_sgd_model(\n    model: Input[Model],\n    project_id: str,\n    vertex_endpoint: Output[Artifact],\n    vertex_model: Output[Model],\n):\n    \"\"\"Deploys an SGDClassifier model to Vertex AI Endpoint.\n\n    Args:\n        model: The model to deploy.\n        project_id: The project ID of the Vertex AI Endpoint.\n\n    Returns:\n        vertex_endpoint: The deployed Vertex AI Endpoint.\n        vertex_model: The deployed Vertex AI Model.\n    \"\"\"\n    from google.cloud import aiplatform\n\n    aiplatform.init(project=project_id)\n\n    deployed_model = aiplatform.Model.upload(\n        display_name=\"cardiovascular-disease-model\",\n        artifact_uri=model.uri,\n        serving_container_image_uri=\"us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.1-6:latest\",\n    )\n    endpoint = deployed_model.deploy(machine_type=\"n1-standard-4\")\n\n    vertex_endpoint.uri = endpoint.resource_name\n    vertex_model.uri = deployed_model.resource_name\n\n"
             ],
             "image": "python:3.7"
           }
@@ -182,6 +236,39 @@
             },
             "taskInfo": {
               "name": "data-preprocessing"
+            }
+          },
+          "deploy-sgd-model": {
+            "cachingOptions": {
+              "enableCache": true
+            },
+            "componentRef": {
+              "name": "comp-deploy-sgd-model"
+            },
+            "dependentTasks": [
+              "model-training"
+            ],
+            "inputs": {
+              "artifacts": {
+                "model": {
+                  "taskOutputArtifact": {
+                    "outputArtifactKey": "model",
+                    "producerTask": "model-training"
+                  }
+                }
+              },
+              "parameters": {
+                "project_id": {
+                  "runtimeValue": {
+                    "constantValue": {
+                      "stringValue": "mlops-final-project-412223"
+                    }
+                  }
+                }
+              }
+            },
+            "taskInfo": {
+              "name": "deploy-sgd-model"
             }
           },
           "model-training": {
