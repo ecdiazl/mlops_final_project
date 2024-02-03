@@ -7,7 +7,7 @@ if __name__ == '__main__':
 
     job = aiplatform.PipelineJob(
         display_name="mlops-fp-sgd",
-        template_path="tab_classif_pipeline.json",
+        template_path="sgd_classif_pipeline.json",
         job_id="mlops-fp-sgd-{0}".format(TIMESTAMP),
         enable_caching=True
     )
