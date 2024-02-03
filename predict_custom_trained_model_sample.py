@@ -49,48 +49,21 @@ def predict_custom_trained_model_sample(
     response = client.predict(
         endpoint=endpoint, instances=instances, parameters=parameters
     )
-    print("response")
-    print(" deployed_model_id:", response.deployed_model_id)
+    print("***RESPONSE***")
+    print("Deployed_model_id:", response.deployed_model_id)
     # The predictions are a google.protobuf.Value representation of the model's predictions.
-    predictions = response.predictions
-    for prediction in predictions:
-        print(" prediction:", dict(prediction))
-
-
+    print('Predicción: ',response.predictions)
+    
 # [END aiplatform_predict_custom_trained_model_sample]
 
 # INGRESO DE DATOS PARA EL CONSUMO DEL MODELO
-# Se ingresan los datos de entrada para el modelo de clasificación como un diccionario
-# El diccionario se pasa como argumento a la función de clasificación
+# Se ingresan los datos como una lista doble
 
-# Importar librerías
-import pandas as pd
-import numpy as np
-import os
+# valores separados por coma a float
+print(f"Ingrese vector separado por comas:")
+vector_string = input()
 
-# definimos las variables de entrada
-var = [
-    "age",
-    "gender",
-    "chestpain",
-    "restingBP",	
-    "serumcholestrol",	
-    "fastingbloodsugar",	
-    "restingrelectro",
-    "maxheartrate",	
-    "exerciseangia",	
-    "oldpeak",
-    "slope",
-    "noofmajorvessels"
-]
-
-# diccionario de datos de entrada
-instances = {}
-
-# solicitamos los datos de entrada
-for variable in var:
-    print(f"Ingrese el valor de {variable}:")
-    instances[variable] = str(input())
+instances = [[float(i) for i in vector_string.split(",")]]
 
 predict_custom_trained_model_sample(
     project="857248180546",
