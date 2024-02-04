@@ -51,7 +51,6 @@ def predict_custom_trained_model_sample(
     )
     print("***RESPONSE***")
     print("Deployed_model_id:", response.deployed_model_id)
-    # The predictions are a google.protobuf.Value representation of the model's predictions.
     print('Predicción: ',response.predictions)
     
 # [END aiplatform_predict_custom_trained_model_sample]
@@ -62,7 +61,6 @@ def predict_custom_trained_model_sample(
 # valores separados por coma a float
 print(f"Ingrese vector separado por comas:")
 vector_string = input()
-
 instances = [[float(i) for i in vector_string.split(",")]]
 
 predict_custom_trained_model_sample(
